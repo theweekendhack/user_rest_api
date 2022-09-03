@@ -1,10 +1,13 @@
 const express = require('express');
+const jsonschema = require("jsonschema");//jsonschema LIB
+const userRegisterSchema = require("../schemas/userRegister.json"); // this is the schema that you created with the rules
+const userModel = require("../models/UserModels.js");
+const {ensureLoggedIn, ensureAdmin,ensureCorrectUserOrAdmin} = require("../middleware/auth.js");
+const {BadRequestError,NotFoundError} = require("../helpers/expressError.js");
+
 const router = express.Router();
 
-const userModel = require("../models/UserModels.js");
-
-
-router.get("/",async(req,res)=>{
+router.get("/",ensureAdmin,async(req,res)=>{
 
 
     const listOfUsers = await userModel.getAllUsers()
@@ -16,20 +19,18 @@ router.get("/",async(req,res)=>{
 })
 
 
-router.get("/:id",async(req,res)=>{
-
+router.get("/:id",ensureCorrectUserOrAdmin,async(req,res)=>{
 
 const id = parseInt(req.params.id);
 
 const user = await userModel.getUser(id);
 
+
 if(!user)
 {
-    res.status(404).json({
-        message : `User with id :${id} cannot be found`
-    })
-}
 
+    throw new NotFoundError(`User with id :${id} cannot be found`);
+}
 else 
 {
     res.json({
@@ -39,26 +40,43 @@ else
 }
 
 
-
-
 })
 
 
 router.post("/",async(req,res)=>{
 
-const userData = req.body;
+    const userData = req.body;
 
-const user = await userModel.createUsers(userData) // create
-res.status(201).json({
-    message: "A user was created!",
-    data : user 
+    const validator = jsonschema.validate(req.body, userRegisterSchema);
+
+    if (!validator.valid) {
+
+    const errs = validator.errors.map(e => e.stack);
+    throw new BadRequestError(errs);
+    }
+
+    
+    //Check to see if the username already exists
+    const foundUser = await userModel.getUserByUsername(req.body.username);
+
+    if(foundUser)
+    {
+    
+       throw new BadRequestError(`Sorry the username ${req.body.username} already exists`);
+    }
+
+
+    const user = await userModel.createUsers(userData) // create
+    res.status(201).json({
+        message: "A user was created!",
+        data : user 
+    })
+
+
 })
 
 
-})
-
-
-router.put("/:id", async (req,res)=>{
+router.put("/:id", ensureCorrectUserOrAdmin,async (req,res)=>{
 
 
     const id  = parseInt(req.params.id);
@@ -68,7 +86,6 @@ router.put("/:id", async (req,res)=>{
     if(!fetchedUser)
     {
 
-        
         res.status(404).json({
             message : `User with id :${id} cannot be found`
         })
@@ -95,7 +112,7 @@ router.put("/:id", async (req,res)=>{
     }
 })
 
-router.delete("/:id",async(req,res)=>{
+router.delete("/:id",ensureCorrectUserOrAdmin,async(req,res)=>{
 
     const id = parseInt(req.params.id);
 
