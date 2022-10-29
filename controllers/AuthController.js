@@ -31,7 +31,6 @@ router.post("/login",async(req,res)=>{
       };
     
 
-      console.log("token with ID", user.id);
   
 
       //creates  token
